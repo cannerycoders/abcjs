@@ -17,7 +17,7 @@ var parseCommon = require("../parse/abc_common");
 		// Global options
 		options = options || {};
 		var qpm;
-		var program = options.program || 0;	// The program if there isn't a program specified.
+		var program = options.program || 0;	// The program if there isn't a program specified in formatting.midi
 		var transpose = options.midiTranspose || 0;
 		// If the tune has a visual transpose then that needs to be subtracted out because we are getting the visual object.
 		if (abctune.visualTranspose)
@@ -75,6 +75,12 @@ var parseCommon = require("../parse/abc_common");
 				}
 				channelExplicitlySet = true;
 			}
+            else
+            if(globals.program_0) {
+                program = globals.program_0[0];
+                channel = 0;
+				channelExplicitlySet = true;
+            }
 			if (globals.transpose)
 				transpose = globals.transpose[0];
 			if (globals.channel) {
@@ -160,7 +166,36 @@ var parseCommon = require("../parse/abc_common");
 						// For each voice in a staff line
 						var voice = staff.voices[k];
 						if (!voices[voiceNumber]) {
+                            // create on first encounter
 							voices[voiceNumber] = [].concat(JSON.parse(JSON.stringify(startVoice)));
+                            // check for voice program override
+                            // NB: we're currently using the private 0-indexed 
+                            //  voiceNumber for our lookup. The V: directive
+                            //  includes a string identifier *and* an optional 
+                            //  name.  Meanwhile the pre-existing 
+                            //  two-argument variant of %%Midi program access
+                            //  two *numbers* (ch and prog).  We define/equate
+                            //  the channel with this order-depending 
+                            //  voiceNumber. A better solution might be to 
+                            //  implement the abc 2.2 %%Midi voice directive.
+                            //  (marked volatile in the spec).
+                            let pkey = `program_${voiceNumber}`;
+                            let voiceprog = globals[pkey][0];
+                            if(voiceprog != null) {
+                                // override program for this voice
+                                let found = false;
+                                let velems = voices[voiceNumber];
+                                for(let i=0;i<velems.length;i++) {
+                                    let el = velems[i];
+                                    if(el.el_type == "instrument") {
+                                        found = true;
+                                        el.program = voiceprog;
+                                        break;
+                                    }
+                                }
+                                if(!found)
+                                    velems.push({el_type: "instrument", "program": voiceprog});
+                            }
 							var voiceName = getTrackTitle(line.staff, voiceNumber);
 							if (voiceName)
 								voices[voiceNumber].unshift({el_type: "name", trackName: voiceName});
@@ -360,8 +395,16 @@ var parseCommon = require("../parse/abc_common");
 											if (elem.params[0] === 10)
 												voices[voiceNumber].push({ el_type: 'instrument', program: PERCUSSION_PROGRAM });
 											break;
-										case "program":
-											addIfDifferent(voices[voiceNumber], { el_type: 'instrument', program: elem.params[0] });
+										case "program": 
+                                            // see also program_ch below, 
+                                            // NB: this is inlined, not global case so
+                                            // the call for program ch prog is lower.
+                                            // NNB: (db) addIfDifferent is questionable here
+                                            //  1. set prog is "cheap"
+                                            //  2. would preclude intra-channel voice changes like p10,p25,p10
+											// was: addIfDifferent(voices[voiceNumber], 
+                                            //          { el_type: 'instrument', program: elem.params[0] });
+											voices[voiceNumber].push({ el_type: 'instrument', program: elem.params[0] });
 											channelExplicitlySet = true;
 											break;
 										case "transpose":
@@ -389,7 +432,21 @@ var parseCommon = require("../parse/abc_common");
 											voices[voiceNumber].push({ el_type: 'volinc', volume: elem.params[0] });
 											break;
 										default:
-											console.log("MIDI seq: midi cmd not handled: ", elem.cmd, elem);
+                                            if(elem.cmd.startsWith("program_")) {
+                                                // depending on the structure of the abc it may
+                                                // be easy to use the single-arg variant of program
+                                                // handled above.
+                                                let voice = parseInt(elem.cmd.split("_")[1]);
+                                                if(voice < voices.length) {
+                                                    let program = elem.params[0];
+                                                    voices[voice].push({ el_type: 'instrument', program });
+                                                    channelExplicitlySet = true;
+                                                } 
+                                                else
+                                                    console.Log(`MIDI seq ignoring program req for ${voice}`);
+                                            }
+                                            else
+                                                console.log("MIDI seq: midi cmd not handled: ", elem.cmd, elem);
 									}
 									if (drumChange) {
 										voices[0].push({el_type: 'drum', params: { pattern: drumPattern, bars: drumBars, intro: drumIntro, on: drumOn}});
@@ -397,7 +454,7 @@ var parseCommon = require("../parse/abc_common");
 									}
 									break;
 								default:
-									console.log("MIDI: element type " + elem.el_type + " not handled.");
+                                    console.log("MIDI: element type " + elem.el_type + " not handled.");
 							}
 						}
 						voiceNumber++;

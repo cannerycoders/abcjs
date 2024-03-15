@@ -503,7 +503,7 @@ var parseDirective = {};
 		"volinc"
 	];
 	var midiCmdParam1Integer1OptionalInteger = [
-		"program"
+		"program" // 1 args: program, 2 args => channel, program (cf sequencer)
 	];
 	var midiCmdParam2Integer = [
 		"ratio",
@@ -511,7 +511,7 @@ var parseDirective = {};
 		"bendvelocity",
 		"pitchbend",
 		"control",
-		"temperamentlinear"
+		"temperamentlinear",
 	];
 	var midiCmdParam4Integer = [
 		"beat"
@@ -562,9 +562,17 @@ var parseDirective = {};
 			else if (midi.length === 2 && midi[1].type !== "number")
 				warn("Expected integer parameter in MIDI " + midi_cmd, restOfString, 0);
 			else {
-				midi_params.push(midi[0].intt);
-				if (midi.length === 2)
-					midi_params.push(midi[1].intt);
+                if(midi_cmd == "program" && midi.length == 2) {
+                    // %%MIDI program ch prog - ie: multple globals
+                    let ch = midi[0].intt;
+                    midi_cmd = `program_${ch}`;
+                    midi_params.push(midi[1].intt);
+                }
+                else {
+                    midi_params.push(midi[0].intt);
+                    if (midi.length === 2)
+                        midi_params.push(midi[1].intt);
+                }
 			}
 		} else if (midiCmdParam2Integer.indexOf(midi_cmd) >= 0) {
 			// TWO INT PARAMETERS
