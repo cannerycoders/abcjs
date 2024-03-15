@@ -64,9 +64,9 @@ var parseCommon = require("../parse/abc_common");
 		//%%MIDI beat ⟨int1⟩ ⟨int2⟩ ⟨int3⟩ ⟨int4⟩: controls the volumes of the notes in a measure. The first note in a bar has volume ⟨int1⟩; other ‘strong’ notes have volume ⟨int2⟩ and all the rest have volume ⟨int3⟩. These values must be in the range 0–127. The parameter ⟨int4⟩ determines which notes are ‘strong’. If the time signature is x/y, then each note is given a position number k = 0, 1, 2. . . x-1 within each bar. If k is a multiple of ⟨int4⟩, then the note is ‘strong’.
 
 		var startingMidi = [];
+        var globals = abctune.formatting.midi;
 		if (abctune.formatting.midi) {
 			//console.log("MIDI Formatting:", abctune.formatting.midi);
-			var globals = abctune.formatting.midi;
 			if (globals.program && globals.program.length > 0) {
 				program = globals.program[0];
 				if (globals.program.length > 1) {
@@ -179,10 +179,10 @@ var parseCommon = require("../parse/abc_common");
                             //  voiceNumber. A better solution might be to 
                             //  implement the abc 2.2 %%Midi voice directive.
                             //  (marked volatile in the spec).
-                            let pkey = `program_${voiceNumber}`;
-                            let voiceprog = globals[pkey][0];
-                            if(voiceprog != null) {
+                            let pval = globals ? globals[`program_${voiceNumber}`] : null;
+                            if(pval != null) {
                                 // override program for this voice
+                                let voiceprog = pval[0];
                                 let found = false;
                                 let velems = voices[voiceNumber];
                                 for(let i=0;i<velems.length;i++) {
